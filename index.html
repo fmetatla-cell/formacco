@@ -909,8 +909,12 @@
         <input id="nl-consent" name="consentement" type="checkbox" required>
         <label for="nl-consent">J'accepte de recevoir les e-mails de Form@cco et je peux me désinscrire à tout moment, conformément à la <a href="#politique-confidentialite" data-nav>politique de confidentialité</a>.</label>
       </div>
+      <div style="position:absolute; left:-9999px; top:-9999px;" aria-hidden="true">
+        <label for="nl-website">Ne pas remplir ce champ</label>
+        <input id="nl-website" name="website" type="text" tabindex="-1" autocomplete="off">
+      </div>
       <p class="form-status" id="newsletterStatus">Merci, votre inscription a bien été prise en compte.</p>
-      <p class="form-note">Formulaire de démonstration : la connexion réelle à votre outil d'emailing (Brevo) sera activée au moment de la mise en ligne.</p>
+      <p class="form-error" id="newsletterError" style="display:none; color:#B3261E; margin-top:10px;">Une erreur est survenue lors de l'inscription. Merci de réessayer, ou de nous écrire directement à <a href="mailto:contact@formacco.fr">contact@formacco.fr</a>.</p>
     </form>
   </div>
 
@@ -1943,9 +1947,13 @@
           <input id="cf-consent" name="consentement" type="checkbox" required>
           <label for="cf-consent">J'accepte que les informations saisies soient utilisées pour traiter ma demande, conformément à la <a href="#politique-confidentialite" data-nav>politique de confidentialité</a>.</label>
         </div>
+        <div style="position:absolute; left:-9999px; top:-9999px;" aria-hidden="true">
+          <label for="cf-website">Ne pas remplir ce champ</label>
+          <input id="cf-website" name="website" type="text" tabindex="-1" autocomplete="off">
+        </div>
         <button type="submit" class="btn btn-primary" style="justify-self:start;">Envoyer ma demande</button>
         <p class="form-status" id="formStatus">Merci, votre message a bien été pris en compte. Nous revenons vers vous rapidement.</p>
-        <p class="form-note">Formulaire de démonstration : la connexion réelle à votre outil d'emailing (Brevo) et le recueil du consentement RGPD seront activés au moment de la mise en ligne.</p>
+        <p class="form-error" id="formError" style="display:none; color:#B3261E; margin-top:10px;">Une erreur est survenue lors de l'envoi. Merci de réessayer, ou de nous écrire directement à <a href="mailto:contact@formacco.fr">contact@formacco.fr</a>.</p>
       </form>
 
       <div class="contact-info">
@@ -2208,23 +2216,76 @@
   var initial = location.hash ? location.hash.slice(1) : 'accueil';
   showPage(initial, {scroll:false});
 
+  // URL du Worker Cloudflare qui relaie les formulaires vers Brevo.
+  // À remplacer par l'URL réelle une fois le Worker créé (étape du guide).
+  var FORMS_ENDPOINT = 'https://formulairesite.f-metatla.workers.dev/';
+
   var form = document.getElementById('contactForm');
   var status = document.getElementById('formStatus');
+  var formError = document.getElementById('formError');
   if(form){
     form.addEventListener('submit', function(e){
       e.preventDefault();
-      status.classList.add('show');
-      form.reset();
+      if(form.website && form.website.value){ return; } // piège à robots
+      formError.style.display = 'none';
+      var btn = form.querySelector('button[type="submit"]');
+      if(btn){ btn.disabled = true; }
+      fetch(FORMS_ENDPOINT, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          type: 'contact',
+          civilite: form.civilite.value,
+          nom: form.nom.value,
+          email: form.email.value,
+          telephone: form.telephone.value,
+          type_demande: form.type_demande.value,
+          message: form.message.value,
+          website: form.website.value
+        })
+      }).then(function(r){ return r.json().catch(function(){ return {ok:false}; }); })
+        .then(function(data){
+          if(data && data.ok){
+            status.classList.add('show');
+            form.reset();
+          } else {
+            formError.style.display = 'block';
+          }
+        })
+        .catch(function(){ formError.style.display = 'block'; })
+        .finally(function(){ if(btn){ btn.disabled = false; } });
     });
   }
 
   var newsletterForm = document.getElementById('newsletterForm');
   var newsletterStatus = document.getElementById('newsletterStatus');
+  var newsletterError = document.getElementById('newsletterError');
   if(newsletterForm){
     newsletterForm.addEventListener('submit', function(e){
       e.preventDefault();
-      newsletterStatus.classList.add('show');
-      newsletterForm.reset();
+      if(newsletterForm.website && newsletterForm.website.value){ return; } // piège à robots
+      newsletterError.style.display = 'none';
+      var btn = newsletterForm.querySelector('button[type="submit"]');
+      if(btn){ btn.disabled = true; }
+      fetch(FORMS_ENDPOINT, {
+        method: 'POST',
+        headers: {'Content-Type': 'application/json'},
+        body: JSON.stringify({
+          type: 'newsletter',
+          email: newsletterForm.email.value,
+          website: newsletterForm.website.value
+        })
+      }).then(function(r){ return r.json().catch(function(){ return {ok:false}; }); })
+        .then(function(data){
+          if(data && data.ok){
+            newsletterStatus.classList.add('show');
+            newsletterForm.reset();
+          } else {
+            newsletterError.style.display = 'block';
+          }
+        })
+        .catch(function(){ newsletterError.style.display = 'block'; })
+        .finally(function(){ if(btn){ btn.disabled = false; } });
     });
   }
 })();
